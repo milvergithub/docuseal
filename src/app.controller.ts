@@ -9,9 +9,7 @@ import { AppService } from './app.service';
 import TelegramBot from 'node-telegram-bot-api';
 import { Web3Storage } from 'web3.storage';
 import * as fs from 'node:fs';
-import { writeFileSync } from 'fs';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { join } from 'path';
 
 @Controller('/api/v1/documents')
 export class AppController {
@@ -40,23 +38,21 @@ export class AppController {
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
   async uploadFile(@UploadedFile() file: Express.Multer.File) {
-    // Guardar archivo en disco temporalmente
-
-    const filePath = join(__dirname, '..', '..', 'uploads', file.originalname);
-
-    writeFileSync(filePath, file.buffer);
-
     // Aquí defines a qué chat lo mandas (por ejemplo, tu propio ID)
-    const chatId = '630724184';
+    const chatId = '630724184'; // tu chatId real
 
-    this.bot.on('message', (msg) => {
-      console.log('Tu chatId es:', msg.chat.id);
-    });
+    // Enviar archivo directamente desde memoria, sin guardarlo en disco
+    await this.bot.sendDocument(
+      chatId,
+      file.buffer,
+      {},
+      { filename: file.originalname },
+    );
 
-    // Enviar archivo al chat de Telegram
-    await this.bot.sendDocument(chatId, filePath);
-
-    return { message: 'Archivo enviado a Telegram', file: file.originalname };
+    return {
+      message: 'Archivo enviado a Telegram',
+      file: file.originalname,
+    };
   }
 
   getAccessToken() {
