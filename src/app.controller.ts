@@ -7,13 +7,14 @@ import {
 } from '@nestjs/common';
 import { AppService } from './app.service';
 import TelegramBot from 'node-telegram-bot-api';
-import { Web3Storage } from 'web3.storage';
-import * as fs from 'fs';
+import { Client, create } from '@storacha/client';
 import { FileInterceptor } from '@nestjs/platform-express';
 
 @Controller('/api/v1/documents')
 export class AppController {
   private bot: TelegramBot;
+  private client: Client;
+  private spaceName = 'documents';
 
   constructor(private readonly appService: AppService) {
     const token = process.env.TELEGRAM_BOT_TOKEN || 'YOUR_DEFAULT_TOKEN';
@@ -28,6 +29,27 @@ export class AppController {
     });
   }
 
+  // Inicializa cliente Storacha y espacio
+  async initStoracha() {
+    if (!this.client) {
+      const token = process.env.STORACHA_TOKEN || '';
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-expect-error
+      this.client = await create({ token });
+      await this.client.setCurrentSpace(<any>'documents');
+
+      // Crear space si no existe y establecerlo como actual
+      try {
+        const space = await this.client.createSpace(this.spaceName);
+        await this.client.setCurrentSpace(<any>space.name);
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      } catch (e: any) {
+        // Si ya existe, solo setearlo
+        await this.client.setCurrentSpace(<any>this.spaceName);
+      }
+    }
+  }
+
   @Get()
   getHello(): string {
     return this.appService.getHello();
@@ -37,7 +59,7 @@ export class AppController {
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
   async uploadFile(@UploadedFile() file: Express.Multer.File) {
-    const chatId = process.env.TELEGRAM_CHAT_ID || 'YOUR_CHAT_ID';
+    const chatId = process.env.TELEGRAM_CHAT_ID || '';
 
     // Send file directly from memory
     await this.bot.sendDocument(
@@ -49,36 +71,21 @@ export class AppController {
       },
     );
 
-    return {
-      message: 'File sent to Telegram',
-      file: file.originalname,
-    };
-  }
-
-  // Web3.Storage helper methods
-  getAccessToken() {
-    return process.env.WEB3STORAGE_TOKEN;
-  }
-
-  makeStorageClient() {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return,@typescript-eslint/no-unsafe-call
-    return new Web3Storage({ token: this.getAccessToken() });
-  }
-
-  async storeDocument(path: string) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const client = this.makeStorageClient();
-    const content = await fs.promises.readFile(path);
-
-    // Create a File object to send to Web3.Storage
+    // 2️⃣ Subir el archivo a Web3.Storage
+    // 2️⃣ Subir archivo a Storacha
+    await this.initStoracha();
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-expect-error
-    const files = [new File([content], 'document.pdf')];
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access
-    const cid = await client.put(files);
+    const blob = new Blob([file.buffer]);
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-expect-error
+    const cid = await this.client.uploadFile(blob, file.originalname);
 
-    console.log('📦 Uploaded to Filecoin/IPFS with CID:', cid);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return cid;
+    return {
+      message: 'File sent to Telegram and uploaded to Web3.Storage',
+      file: file.originalname,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      cid,
+    };
   }
 }
