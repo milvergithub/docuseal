@@ -9,6 +9,7 @@ import { AppService } from './app.service';
 import TelegramBot from 'node-telegram-bot-api';
 import { Client, create } from '@storacha/client';
 import { FileInterceptor } from '@nestjs/platform-express';
+import * as crypto from 'crypto';
 
 @Controller('/api/v1/documents')
 export class AppController {
@@ -71,7 +72,9 @@ export class AppController {
       },
     );
 
-    // 2️⃣ Subir el archivo a Web3.Storage
+    // 2️⃣ obtener el hash
+    const pdfHash = this.getPdfHash(file.buffer);
+    console.log(pdfHash);
     // 2️⃣ Subir archivo a Storacha
     await this.initStoracha();
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -86,6 +89,11 @@ export class AppController {
       file: file.originalname,
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       cid,
+      pdfHash,
     };
+  }
+
+  private getPdfHash(fileBuffer: Buffer): string {
+    return crypto.createHash('sha256').update(fileBuffer).digest('hex');
   }
 }
